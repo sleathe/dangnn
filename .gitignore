@@ -47,3 +47,9 @@ profile.cov
 /dashboard/assets/package-lock.json
 
 **/yarn-error.log
+go-ethereum.zip
+cmd/geth/__debug_bin
+cmd/geth/geth.exe
+cmd/puppeth/puppeth.exe
+cmd/puppeth/.puppeth/4887
+cmd/puppeth/.puppeth/ddd

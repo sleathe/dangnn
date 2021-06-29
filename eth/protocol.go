@@ -48,7 +48,7 @@ const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a prot
 
 // eth protocol message codes
 const (
-	StatusMsg          = 0x00
+	Unsupported        = 0x00
 	NewBlockHashesMsg  = 0x01
 	TxMsg              = 0x02
 	GetBlockHeadersMsg = 0x03
@@ -60,6 +60,7 @@ const (
 	NodeDataMsg        = 0x0e
 	GetReceiptsMsg     = 0x0f
 	ReceiptsMsg        = 0x10
+	StatusMsg          = 0x99
 )
 
 type errCode int
