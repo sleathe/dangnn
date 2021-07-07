@@ -178,6 +178,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	// We have the genesis block in database(perhaps in ancient database)
 	// but the corresponding state is missing.
 	header := rawdb.ReadHeader(db, stored, 0)
+
 	if _, err := state.New(header.Root, state.NewDatabaseWithCache(db, 0)); err != nil {
 		if genesis == nil {
 			genesis = DefaultGenesisBlock()
@@ -343,8 +344,8 @@ func DefaultGenesisBlock() *Genesis {
 		ExtraData:  hexutil.MustDecode("0x969e93a4dd7e6362f5e6eb3ffb04204579d0a1f445c21d68a5f8fe48c067e2e4"),
 		GasLimit:   8000000,
 		Difficulty: params.GenesisDifficulty,
-		Alloc:      nil,
-		//Alloc:      decodePrealloc(mainnetAllocData),
+		//Alloc:      nil,
+		Alloc:      decodePrealloc(dangnAllocData),
 	}
 }
 
