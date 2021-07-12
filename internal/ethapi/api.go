@@ -538,6 +538,16 @@ func (s *PublicBlockChainAPI) GetBalance(ctx context.Context, address common.Add
 	return (*hexutil.Big)(state.GetBalance(address)), state.Error()
 }
 
+
+func (s *PublicBlockChainAPI) IsMiner(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Uint64, error) {
+	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+	if state == nil || err != nil {
+		return 0, err
+	}
+	return (hexutil.Uint64)(state.IsMiner(address)), state.Error()
+}
+
+
 // Result structs for GetProof
 type AccountResult struct {
 	Address      common.Address  `json:"address"`

@@ -5431,6 +5431,14 @@ var methods = function () {
         params: 0
     });
 
+    var isMiner = new Method({
+      name: 'isMiner',
+      call: 'eth_isMiner',
+      params: 2,
+      inputFormatter: [formatters.inputAddressFormatter, formatters.inputDefaultBlockNumberFormatter],
+      outputFormatter: utils.toDecimal
+    });
+
     return [
         getBalance,
         getStorageAt,
@@ -5454,7 +5462,8 @@ var methods = function () {
         compileLLL,
         compileSerpent,
         submitWork,
-        getWork
+        getWork,
+        isMiner
     ];
 };
 

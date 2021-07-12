@@ -104,6 +104,7 @@ type Account struct {
 	Balance  *big.Int
 	Root     common.Hash // merkle root of the storage trie
 	CodeHash []byte
+	AuthMine uint64
 }
 
 // newObject creates a state object.
@@ -439,6 +440,19 @@ func (s *stateObject) setNonce(nonce uint64) {
 	s.data.Nonce = nonce
 }
 
+func (s *stateObject) SetMiner(miner uint64) {
+	s.db.journal.append(minerChange{
+		account: &s.address,
+		prev:    s.data.AuthMine,
+	})
+	s.setMiner(miner)
+}
+
+func (s *stateObject) setMiner(miner uint64) {
+	s.data.AuthMine = miner
+}
+
+
 func (s *stateObject) CodeHash() []byte {
 	return s.data.CodeHash
 }
@@ -449,6 +463,10 @@ func (s *stateObject) Balance() *big.Int {
 
 func (s *stateObject) Nonce() uint64 {
 	return s.data.Nonce
+}
+
+func (s *stateObject) Miner() uint64 {
+	return s.data.AuthMine
 }
 
 // Never called, but must be present to allow stateObject to be used

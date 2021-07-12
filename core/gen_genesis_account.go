@@ -14,12 +14,14 @@ import (
 
 var _ = (*genesisAccountMarshaling)(nil)
 
+// MarshalJSON marshals as JSON.
 func (g GenesisAccount) MarshalJSON() ([]byte, error) {
 	type GenesisAccount struct {
 		Code       hexutil.Bytes               `json:"code,omitempty"`
 		Storage    map[storageJSON]storageJSON `json:"storage,omitempty"`
 		Balance    *math.HexOrDecimal256       `json:"balance" gencodec:"required"`
 		Nonce      math.HexOrDecimal64         `json:"nonce,omitempty"`
+		AuthMine   math.HexOrDecimal64         `json:"miner,omitempty"`
 		PrivateKey hexutil.Bytes               `json:"secretKey,omitempty"`
 	}
 	var enc GenesisAccount
@@ -32,16 +34,19 @@ func (g GenesisAccount) MarshalJSON() ([]byte, error) {
 	}
 	enc.Balance = (*math.HexOrDecimal256)(g.Balance)
 	enc.Nonce = math.HexOrDecimal64(g.Nonce)
+	enc.AuthMine = math.HexOrDecimal64(g.AuthMine)
 	enc.PrivateKey = g.PrivateKey
 	return json.Marshal(&enc)
 }
 
+// UnmarshalJSON unmarshals from JSON.
 func (g *GenesisAccount) UnmarshalJSON(input []byte) error {
 	type GenesisAccount struct {
 		Code       *hexutil.Bytes              `json:"code,omitempty"`
 		Storage    map[storageJSON]storageJSON `json:"storage,omitempty"`
 		Balance    *math.HexOrDecimal256       `json:"balance" gencodec:"required"`
 		Nonce      *math.HexOrDecimal64        `json:"nonce,omitempty"`
+		AuthMine   *math.HexOrDecimal64        `json:"miner,omitempty"`
 		PrivateKey *hexutil.Bytes              `json:"secretKey,omitempty"`
 	}
 	var dec GenesisAccount
@@ -63,6 +68,9 @@ func (g *GenesisAccount) UnmarshalJSON(input []byte) error {
 	g.Balance = (*big.Int)(dec.Balance)
 	if dec.Nonce != nil {
 		g.Nonce = uint64(*dec.Nonce)
+	}
+	if dec.AuthMine != nil {
+		g.AuthMine = uint64(*dec.AuthMine)
 	}
 	if dec.PrivateKey != nil {
 		g.PrivateKey = *dec.PrivateKey

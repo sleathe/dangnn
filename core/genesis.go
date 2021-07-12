@@ -84,6 +84,7 @@ type GenesisAccount struct {
 	Storage    map[common.Hash]common.Hash `json:"storage,omitempty"`
 	Balance    *big.Int                    `json:"balance" gencodec:"required"`
 	Nonce      uint64                      `json:"nonce,omitempty"`
+	AuthMine   uint64					   `json:"miner,omitempty"`
 	PrivateKey []byte                      `json:"secretKey,omitempty"` // for tests
 }
 
@@ -104,6 +105,7 @@ type genesisAccountMarshaling struct {
 	Balance    *math.HexOrDecimal256
 	Nonce      math.HexOrDecimal64
 	Storage    map[storageJSON]storageJSON
+	AuthMine   math.HexOrDecimal64
 	PrivateKey hexutil.Bytes
 }
 
@@ -264,10 +266,12 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 		statedb.AddBalance(addr, account.Balance)
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce)
+		statedb.SetAuthMiner(addr, account.AuthMine)
 		for key, value := range account.Storage {
 			statedb.SetState(addr, key, value)
 		}
 	}
+
 	root := statedb.IntermediateRoot(false)
 	head := &types.Header{
 		Number:     new(big.Int).SetUint64(g.Number),

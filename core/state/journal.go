@@ -115,6 +115,10 @@ type (
 		account            *common.Address
 		prevcode, prevhash []byte
 	}
+	minerChange struct {
+		account *common.Address
+		prev    uint64
+	}
 
 	// Changes to other state values.
 	refundChange struct {
@@ -184,6 +188,15 @@ func (ch nonceChange) revert(s *StateDB) {
 func (ch nonceChange) dirtied() *common.Address {
 	return ch.account
 }
+
+func (ch minerChange) revert(s *StateDB) {
+	s.getStateObject(*ch.account).setNonce(ch.prev)
+}
+
+func (ch minerChange) dirtied() *common.Address {
+	return ch.account
+}
+
 
 func (ch codeChange) revert(s *StateDB) {
 	s.getStateObject(*ch.account).setCode(common.BytesToHash(ch.prevhash), ch.prevcode)

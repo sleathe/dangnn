@@ -854,6 +854,13 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			log.Error("Refusing to mine without etherbase")
 			return
 		}
+
+		state := w.current.state.Copy()
+		if state.IsMiner(w.coinbase) == 0 	{
+			log.Error("Refusing to mine without Authorise")
+			return
+		}
+
 		header.Coinbase = w.coinbase
 	}
 	if err := w.engine.Prepare(w.chain, header); err != nil {
