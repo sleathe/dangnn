@@ -53,7 +53,7 @@ const (
 // les protocol message codes
 const (
 	// Protocol messages inherited from LPV1
-	StatusMsg          = 0x00
+	Unsupported        = 0x00
 	AnnounceMsg        = 0x01
 	GetBlockHeadersMsg = 0x02
 	BlockHeadersMsg    = 0x03
@@ -63,6 +63,7 @@ const (
 	ReceiptsMsg        = 0x07
 	GetCodeMsg         = 0x0a
 	CodeMsg            = 0x0b
+	StatusMsg 		   = 0x0e
 	// Protocol messages introduced in LPV2
 	GetProofsV2Msg         = 0x0f
 	ProofsV2Msg            = 0x10
