@@ -38,7 +38,10 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
-type allocItem struct{ Addr, Balance *big.Int }
+type allocItem struct{
+	Addr, Balance *big.Int
+	AuthMine   uint64
+}
 
 type allocList []allocItem
 
@@ -53,7 +56,7 @@ func makelist(g *core.Genesis) allocList {
 			panic(fmt.Sprintf("can't encode account %x", addr))
 		}
 		bigAddr := new(big.Int).SetBytes(addr.Bytes())
-		a = append(a, allocItem{bigAddr, account.Balance})
+		a = append(a, allocItem{bigAddr, account.Balance, account.AuthMine})
 	}
 	sort.Sort(a)
 	return a

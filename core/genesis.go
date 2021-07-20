@@ -349,7 +349,7 @@ func DefaultGenesisBlock() *Genesis {
 		GasLimit:   8000000,
 		Difficulty: params.GenesisDifficulty,
 		//Alloc:      nil,
-		Alloc:      decodePrealloc(dangnAllocData),
+		Alloc:      decodePrealloc(dangnnAllocData),
 	}
 }
 
@@ -358,10 +358,10 @@ func DefaultTestnetGenesisBlock() *Genesis {
 	return &Genesis{
 		Config:     params.TestnetChainConfig,
 		Nonce:      66,
-		ExtraData:  hexutil.MustDecode("0x3535353535353535353535353535353535353535353535353535353535353535"),
+		ExtraData:  hexutil.MustDecode("0x969e93a4dd7e6362f5e6eb3ffb04204579d0a1f445c21d68a5f8fe48c067e2e4"),
 		GasLimit:   16777216,
 		Difficulty: big.NewInt(1048576),
-		Alloc:      decodePrealloc(testnetAllocData),
+		Alloc:      decodePrealloc(dangnnTestnetAllocData),
 	}
 }
 
@@ -416,13 +416,16 @@ func DeveloperGenesisBlock(period uint64, faucet common.Address) *Genesis {
 }
 
 func decodePrealloc(data string) GenesisAlloc {
-	var p []struct{ Addr, Balance *big.Int }
+	var p []struct{
+		Addr, Balance *big.Int
+		AuthMine uint64
+	}
 	if err := rlp.NewStream(strings.NewReader(data), 0).Decode(&p); err != nil {
 		panic(err)
 	}
 	ga := make(GenesisAlloc, len(p))
 	for _, account := range p {
-		ga[common.BigToAddress(account.Addr)] = GenesisAccount{Balance: account.Balance}
+		ga[common.BigToAddress(account.Addr)] = GenesisAccount{Balance: account.Balance, AuthMine: account.AuthMine}
 	}
 	return ga
 }

@@ -29,7 +29,7 @@ import (
 var (
 	//MainnetGenesisHash = common.HexToHash("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
 	//TestnetGenesisHash = common.HexToHash("0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d")
-	MainnetGenesisHash = common.HexToHash("0xc50bf2aea47a1c34c3f4e991a5d44fa7b2c95fa733031ccdd2f15790bc6e80bc")
+	MainnetGenesisHash = common.HexToHash("0xac45676d721b416c4fcdc33a3482e538c5e4017c3a5d267dc0462e55eee6a6f5")
 	TestnetGenesisHash = common.HexToHash("0x00")
 	RinkebyGenesisHash = common.HexToHash("0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177")
 	GoerliGenesisHash  = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
@@ -59,16 +59,16 @@ var (
 		ChainID:             big.NewInt(51315),
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
-		DAOForkSupport:      true,
+		DAOForkSupport:      false,
 		EIP150Block:         big.NewInt(0),
 		EIP150Hash:          common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
 		ByzantiumBlock:      big.NewInt(0),
-		ConstantinopleBlock: nil,
-		PetersburgBlock:     nil,
-		IstanbulBlock:       nil,
-		MuirGlacierBlock:    nil,
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
 		Ethash:              new(EthashConfig),
 	}
 
