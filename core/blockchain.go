@@ -245,7 +245,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	// The first thing the node will do is reconstruct the verification data for
 	// the head block (ethash cache or clique voting snapshot). Might as well do
 	// it in advance.
-	bc.engine.VerifyHeader(bc, bc.CurrentHeader(), true)
+	bc.engine.VerifyHeader(bc, bc.CurrentHeader(), true, true)
 
 	if frozen, err := bc.db.Ancients(); err == nil && frozen > 0 {
 		var (
@@ -1527,7 +1527,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		headers[i] = block.Header()
 		seals[i] = verifySeals
 	}
-	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
+	abort, results := bc.engine.VerifyHeaders(bc, headers, seals, false)
 	defer close(abort)
 
 	// Peek the error for the first block to decide the directing import logic
@@ -2175,6 +2175,15 @@ func (bc *BlockChain) GetHeaderByHash(hash common.Hash) *types.Header {
 // it if present.
 func (bc *BlockChain) HasHeader(hash common.Hash, number uint64) bool {
 	return bc.hc.HasHeader(hash, number)
+}
+
+func (bc *BlockChain) IsMiner(root common.Hash, minerAddr common.Address, number uint64) uint64 {
+	statedb,err := bc.StateAt(root)
+	if err != nil {
+		log.Trace("invalid parent root hash","hash:", root, "number",number)
+		return 0	// not checked
+	}
+	return statedb.IsMiner(minerAddr)
 }
 
 // GetCanonicalHash returns the canonical hash for a given block number

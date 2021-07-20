@@ -98,6 +98,12 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
+
+	// Validate the coinbase against the received state root and throw
+	// an error if they don't match.
+	if statedb.IsMiner(header.Coinbase) == 0 {
+		return  fmt.Errorf("invalid coinbase root: %x coinbase: %x)", header.Root, header.Coinbase)
+	}
 	return nil
 }
 

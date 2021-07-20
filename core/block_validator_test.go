@@ -107,11 +107,11 @@ func testHeaderConcurrentVerification(t *testing.T, threads int) {
 
 		if valid {
 			chain, _ := NewBlockChain(testdb, nil, params.TestChainConfig, ethash.NewFaker(), vm.Config{}, nil)
-			_, results = chain.engine.VerifyHeaders(chain, headers, seals)
+			_, results = chain.engine.VerifyHeaders(chain, headers, seals, false)
 			chain.Stop()
 		} else {
 			chain, _ := NewBlockChain(testdb, nil, params.TestChainConfig, ethash.NewFakeFailer(uint64(len(headers)-1)), vm.Config{}, nil)
-			_, results = chain.engine.VerifyHeaders(chain, headers, seals)
+			_, results = chain.engine.VerifyHeaders(chain, headers, seals, false)
 			chain.Stop()
 		}
 		// Wait for all the verification results
@@ -176,7 +176,7 @@ func testHeaderConcurrentAbortion(t *testing.T, threads int) {
 	chain, _ := NewBlockChain(testdb, nil, params.TestChainConfig, ethash.NewFakeDelayer(time.Millisecond), vm.Config{}, nil)
 	defer chain.Stop()
 
-	abort, results := chain.engine.VerifyHeaders(chain, headers, seals)
+	abort, results := chain.engine.VerifyHeaders(chain, headers, seals, false)
 	close(abort)
 
 	// Deplete the results channel

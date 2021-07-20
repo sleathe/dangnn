@@ -250,7 +250,7 @@ func (hc *HeaderChain) ValidateHeaderChain(chain []*types.Header, checkFreq int)
 		seals[len(seals)-1] = true
 	}
 
-	abort, results := hc.engine.VerifyHeaders(hc, chain, seals)
+	abort, results := hc.engine.VerifyHeaders(hc, chain, seals, false)
 	defer close(abort)
 
 	// Iterate over the headers and ensure they all check out
@@ -558,3 +558,8 @@ func (hc *HeaderChain) Engine() consensus.Engine { return hc.engine }
 func (hc *HeaderChain) GetBlock(hash common.Hash, number uint64) *types.Block {
 	return nil
 }
+
+func (hc *HeaderChain) IsMiner(root common.Hash, minerAddr common.Address, number uint64) uint64 {
+	return 0
+}
+

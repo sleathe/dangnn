@@ -200,12 +200,12 @@ func (e *NoRewardEngine) Author(header *types.Header) (common.Address, error) {
 	return e.inner.Author(header)
 }
 
-func (e *NoRewardEngine) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
-	return e.inner.VerifyHeader(chain, header, seal)
+func (e *NoRewardEngine) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool, checkMiner bool) error {
+	return e.inner.VerifyHeader(chain, header, seal, checkMiner)
 }
 
-func (e *NoRewardEngine) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
-	return e.inner.VerifyHeaders(chain, headers, seals)
+func (e *NoRewardEngine) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool, checkMiner bool) (chan<- struct{}, <-chan error) {
+	return e.inner.VerifyHeaders(chain, headers, seals, checkMiner)
 }
 
 func (e *NoRewardEngine) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {

@@ -86,7 +86,7 @@ func (ethash *Ethash) Author(header *types.Header) (common.Address, error) {
 
 // VerifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum ethash engine.
-func (ethash *Ethash) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
+func (ethash *Ethash) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool, checkMiner bool) error {
 	// If we're running a full engine faking, accept any input as valid
 	if ethash.config.PowMode == ModeFullFake {
 		return nil
@@ -101,13 +101,13 @@ func (ethash *Ethash) VerifyHeader(chain consensus.ChainReader, header *types.He
 		return consensus.ErrUnknownAncestor
 	}
 	// Sanity checks passed, do a proper verification
-	return ethash.verifyHeader(chain, header, parent, false, seal)
+	return ethash.verifyHeader(chain, header, parent, false, seal, checkMiner)
 }
 
 // VerifyHeaders is similar to VerifyHeader, but verifies a batch of headers
 // concurrently. The method returns a quit channel to abort the operations and
 // a results channel to retrieve the async verifications.
-func (ethash *Ethash) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
+func (ethash *Ethash) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool, checkMiner bool) (chan<- struct{}, <-chan error) {
 	// If we're running a full engine faking, accept any input as valid
 	if ethash.config.PowMode == ModeFullFake || len(headers) == 0 {
 		abort, results := make(chan struct{}), make(chan error, len(headers))
@@ -133,7 +133,7 @@ func (ethash *Ethash) VerifyHeaders(chain consensus.ChainReader, headers []*type
 	for i := 0; i < workers; i++ {
 		go func() {
 			for index := range inputs {
-				errors[index] = ethash.verifyHeaderWorker(chain, headers, seals, index)
+				errors[index] = ethash.verifyHeaderWorker(chain, headers, seals, index, checkMiner)
 				done <- index
 			}
 		}()
@@ -169,7 +169,7 @@ func (ethash *Ethash) VerifyHeaders(chain consensus.ChainReader, headers []*type
 	return abort, errorsOut
 }
 
-func (ethash *Ethash) verifyHeaderWorker(chain consensus.ChainReader, headers []*types.Header, seals []bool, index int) error {
+func (ethash *Ethash) verifyHeaderWorker(chain consensus.ChainReader, headers []*types.Header, seals []bool, index int, checkMiner bool) error {
 	var parent *types.Header
 	if index == 0 {
 		parent = chain.GetHeader(headers[0].ParentHash, headers[0].Number.Uint64()-1)
@@ -182,7 +182,7 @@ func (ethash *Ethash) verifyHeaderWorker(chain consensus.ChainReader, headers []
 	if chain.GetHeader(headers[index].Hash(), headers[index].Number.Uint64()) != nil {
 		return nil // known block
 	}
-	return ethash.verifyHeader(chain, headers[index], parent, false, seals[index])
+	return ethash.verifyHeader(chain, headers[index], parent, false, seals[index], checkMiner)
 }
 
 // VerifyUncles verifies that the given block's uncles conform to the consensus
@@ -233,7 +233,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 		if ancestors[uncle.ParentHash] == nil || uncle.ParentHash == block.ParentHash() {
 			return errDanglingUncle
 		}
-		if err := ethash.verifyHeader(chain, uncle, ancestors[uncle.ParentHash], true, true); err != nil {
+		if err := ethash.verifyHeader(chain, uncle, ancestors[uncle.ParentHash], true, true, false); err != nil {
 			return err
 		}
 	}
@@ -243,7 +243,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 // verifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum ethash engine.
 // See YP section 4.3.4. "Block Header Validity"
-func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *types.Header, uncle bool, seal bool) error {
+func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *types.Header, uncle bool, seal bool, checkMiner bool) error {
 	// Ensure that the header's extra-data section is of a reasonable size
 	if uint64(len(header.Extra)) > params.MaximumExtraDataSize {
 		return fmt.Errorf("extra-data too long: %d > %d", len(header.Extra), params.MaximumExtraDataSize)
@@ -287,6 +287,14 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	if diff := new(big.Int).Sub(header.Number, parent.Number); diff.Cmp(big.NewInt(1)) != 0 {
 		return consensus.ErrInvalidNumber
 	}
+
+	if checkMiner {
+		authMiner := chain.IsMiner(parent.Root,header.Coinbase,header.Number.Uint64())
+		if authMiner == 0 {
+			return consensus.ErrInvalidMiner
+		}
+	}
+
 	// Verify the engine specific seal securing the block
 	if seal {
 		if err := ethash.VerifySeal(chain, header); err != nil {

@@ -155,8 +155,8 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 	manager.downloader = downloader.New(manager.checkpointNumber, chaindb, stateBloom, manager.eventMux, blockchain, nil, manager.removePeer)
 
 	// Construct the fetcher (short sync)
-	validator := func(header *types.Header) error {
-		return engine.VerifyHeader(blockchain, header, true)
+	validator := func(header *types.Header, parent *types.Header, checkMiner bool) error {
+		return engine.VerifyHeader(blockchain, header, true, checkMiner)
 	}
 	heighter := func() uint64 {
 		return blockchain.CurrentBlock().NumberU64()
