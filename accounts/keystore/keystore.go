@@ -62,6 +62,7 @@ type KeyStore struct {
 	changes  chan struct{}                // Channel receiving change notifications from the cache
 	unlocked map[common.Address]*unlocked // Currently unlocked account (decrypted private keys)
 
+	miner	 map[common.Address]*unlocked
 	wallets     []accounts.Wallet       // Wallet wrappers around the individual key files
 	updateFeed  event.Feed              // Event feed to notify wallet additions/removals
 	updateScope event.SubscriptionScope // Subscription scope tracking current live listeners
@@ -314,6 +315,26 @@ func (ks *KeyStore) SignTxWithPassphrase(a accounts.Account, passphrase string, 
 	return types.SignTx(tx, types.HomesteadSigner{}, key.PrivateKey)
 }
 
+
+// SignBlock signs the given block header with the requested account.
+func (ks *KeyStore) SignBlock(a accounts.Account, block *types.Block, chainID *big.Int) (*types.Block, error) {
+	// Look up the key to sign with and abort if it cannot be found
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
+
+	if ks.miner == nil {
+		return nil, ErrLocked
+	}
+	if _, ok :=ks.miner[a.Address];!ok {
+		return nil, ErrLocked
+	}
+	// Depending on the presence of the chain ID, sign with EIP155 or homestead
+	if chainID != nil {
+		return types.SignBlock(block, types.NewBlockSigner(chainID), ks.miner[a.Address].PrivateKey)
+	}
+	return types.SignBlock(block, types.EIP155BlockSigner{}, ks.miner[a.Address].PrivateKey)
+}
+
 // Unlock unlocks the given account indefinitely.
 func (ks *KeyStore) Unlock(a accounts.Account, passphrase string) error {
 	return ks.TimedUnlock(a, passphrase, 0)
@@ -366,6 +387,33 @@ func (ks *KeyStore) TimedUnlock(a accounts.Account, passphrase string, timeout t
 	ks.unlocked[a.Address] = u
 	return nil
 }
+
+// UnlockMiner unlocks the given account with the passphrase.
+func (ks *KeyStore) UnlockMiner(a accounts.Account, passphrase string) error {
+	a, key, err := ks.getDecryptedKey(a, passphrase)
+	if err != nil {
+		return err
+	}
+
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
+
+	ks.miner = make(map[common.Address]*unlocked)
+	ks.miner[a.Address] = &unlocked{Key: key}
+	return nil
+}
+
+// IsLockMiner checks whether the password for the specified account has been created.
+func (ks *KeyStore) IsLockMiner(addr common.Address) bool {
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
+
+	if _, ok :=ks.miner[addr]; ok {
+		return true
+	}
+	return false
+}
+
 
 // Find resolves the given account into a unique entry in the keystore.
 func (ks *KeyStore) Find(a accounts.Account) (accounts.Account, error) {

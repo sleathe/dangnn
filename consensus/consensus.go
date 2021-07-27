@@ -48,7 +48,7 @@ type ChainReader interface {
 	// GetBlock retrieves a block from the database by hash and number.
 	GetBlock(hash common.Hash, number uint64) *types.Block
 
-	// IsMiner retrieves a block from the database by miner authorise
+	// IsMiner retrieves a block from the database by miner authority
 	IsMiner(root common.Hash, minerAddr common.Address, number uint64) uint64
 }
 

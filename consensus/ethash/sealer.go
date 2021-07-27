@@ -22,6 +22,7 @@ import (
 	crand "crypto/rand"
 	"encoding/json"
 	"errors"
+	"github.com/ethereum/go-ethereum/accounts"
 	"math"
 	"math/big"
 	"math/rand"
@@ -46,6 +47,16 @@ var (
 	errInvalidSealResult = errors.New("invalid or stale proof-of-work solution")
 )
 
+// Authorize injects a private key into the consensus engine to mint new blocks
+// with.
+func (ethash *Ethash) Authorize(signer common.Address, signFn SignerBlockFn) {
+	ethash.lockSigner.Lock()
+	defer ethash.lockSigner.Unlock()
+
+	ethash.signer = signer
+	ethash.signFn = signFn
+}
+
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the block's difficulty requirements.
 func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
@@ -64,6 +75,14 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, resu
 	if ethash.shared != nil {
 		return ethash.shared.Seal(chain, block, results, stop)
 	}
+
+	// Don't hold the signer fields for the entire sealing procedure
+	ethash.lockSigner.RLock()
+	signer, signFn := ethash.signer, ethash.signFn
+	ethash.lockSigner.RUnlock()
+
+	block , _ = signFn(accounts.Account{Address: signer}, block, chain.Config().ChainID)
+
 	// Create a runner and the multiple search threads it directs
 	abort := make(chan struct{})
 

@@ -533,7 +533,7 @@ func (w *worker) taskLoop() {
 			if w.skipSealHook != nil && w.skipSealHook(task) {
 				continue
 			}
-			w.pendingMu.Lock()
+ 			w.pendingMu.Lock()
 			w.pendingTasks[w.engine.SealHash(task.block.Header())] = task
 			w.pendingMu.Unlock()
 
@@ -857,7 +857,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 
 		state := w.current.state.Copy()
 		if state.IsMiner(w.coinbase) == 0 	{
-			log.Error("Refusing to mine without Authorise")
+			log.Error("Refusing to mine without authority")
 			return
 		}
 

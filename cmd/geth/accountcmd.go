@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/cmd/utils"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/console"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -261,6 +262,37 @@ func getPassPhrase(prompt string, confirmation bool, i int, passwords []string) 
 		}
 	}
 	return password
+}
+
+// Attempts to enter the specified mining account.
+func unlockAuthMiner(ks *keystore.KeyStore, address common.Address, passwords []string) (accounts.Account, string) {
+	account:= accounts.Account{Address: address}
+
+	var err error
+	for trials := 0; trials < 3; trials++ {
+		prompt := fmt.Sprintf("UnLock Miner address %s | Attempt %d/%d", address.Hex(), trials+1, 3)
+		password := getPassPhrase(prompt, false, 0, passwords)	// use first password
+		err = ks.UnlockMiner(account, password)
+		if err == nil {
+			log.Info("Unlocked account", "address", account.Address.Hex())
+			return account, password
+		}
+		if err, ok := err.(*keystore.AmbiguousAddrError); ok {
+			log.Info("Unlocked account", "address", account.Address.Hex())
+			return ambiguousAddrRecovery(ks, err, password), password
+		}
+		if err != keystore.ErrDecrypt {
+			// No need to prompt again if the error is not decryption-related.
+			break
+		}
+		if err != nil && passwords != nil {
+			break
+		}
+	}
+	// All trials expended to unlock account, bail out
+	utils.Fatalf("Failed to unlock account %s (%v)", address.Hex(), err)
+
+	return accounts.Account{}, ""
 }
 
 func ambiguousAddrRecovery(ks *keystore.KeyStore, err *keystore.AmbiguousAddrError, auth string) accounts.Account {

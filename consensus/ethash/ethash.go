@@ -34,7 +34,10 @@ import (
 	"unsafe"
 
 	mmap "github.com/edsrzf/mmap-go"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -392,6 +395,10 @@ const (
 	ModeFullFake
 )
 
+// SignerFn is a signer callback function to request a header to be signed by a
+// backing account.
+type SignerBlockFn func(account accounts.Account, block *types.Block, chainID *big.Int) (*types.Block, error)
+
 // Config are the configuration parameters of the ethash.
 type Config struct {
 	CacheDir       string
@@ -424,6 +431,10 @@ type Ethash struct {
 	shared    *Ethash       // Shared PoW verifier to avoid cache regeneration
 	fakeFail  uint64        // Block number which fails PoW check even in fake mode
 	fakeDelay time.Duration // Time delay to sleep for before returning from verify
+
+	signer common.Address 		// Ethereum address of the signing key
+	signFn SignerBlockFn  		// Signer function to authorize hashes with
+	lockSigner   sync.RWMutex   // Protects the signer fields
 
 	lock      sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
 	closeOnce sync.Once  // Ensures exit channel will not be closed twice.

@@ -580,6 +580,12 @@ func (w *wallet) SignTx(account accounts.Account, tx *types.Transaction, chainID
 	return signed, nil
 }
 
+// SignBlock signs the given block header with the requested account. not used
+func (w *wallet) SignBlock(a accounts.Account, block *types.Block, chainID *big.Int) (*types.Block, error) {
+	return nil , nil
+}
+
+
 // SignHashWithPassphrase implements accounts.Wallet, however signing arbitrary
 // data is not supported for Ledger wallets, so this method will always return
 // an error.

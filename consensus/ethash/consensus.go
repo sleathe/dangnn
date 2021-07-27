@@ -288,6 +288,15 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 		return consensus.ErrInvalidNumber
 	}
 
+	minerAddr, err := types.BlockSender(types.MakeBlockSigner(chain.Config()),header)
+	if err != nil {
+		return consensus.ErrInvalidMiner
+	}
+
+	if !bytes.Equal(header.Coinbase.Bytes(),minerAddr.Bytes()) {
+		return consensus.ErrInvalidMiner
+	}
+
 	if checkMiner {
 		authMiner := chain.IsMiner(parent.Root,header.Coinbase,header.Number.Uint64())
 		if authMiner == 0 {

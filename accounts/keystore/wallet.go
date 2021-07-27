@@ -136,6 +136,17 @@ func (w *keystoreWallet) SignTx(account accounts.Account, tx *types.Transaction,
 	return w.keystore.SignTx(account, tx, chainID)
 }
 
+// SignBlock signs the given block header with the requested account.
+func (w *keystoreWallet) SignBlock(account accounts.Account, block *types.Block, chainID *big.Int) (*types.Block, error) {
+	// Make sure the requested account is contained within
+	if !w.Contains(account) {
+		return nil, accounts.ErrUnknownAccount
+	}
+	// Account seems valid, request the keystore to sign
+	return w.keystore.SignBlock(account, block, chainID)
+}
+
+
 // SignTxWithPassphrase implements accounts.Wallet, attempting to sign the given
 // transaction with the given account using passphrase as extra authentication.
 func (w *keystoreWallet) SignTxWithPassphrase(account accounts.Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {

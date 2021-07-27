@@ -568,8 +568,8 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'start',
 			call: 'miner_start',
-			params: 1,
-			inputFormatter: [null]
+			params: 2,
+			inputFormatter: [null,null]
 		}),
 		new web3._extend.Method({
 			name: 'stop',

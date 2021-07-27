@@ -708,6 +708,17 @@ func (w *Wallet) SignTx(account accounts.Account, tx *types.Transaction, chainID
 	return tx.WithSignature(signer, sig)
 }
 
+// SignBlock signs the given block header with the requested account.
+func (w *Wallet) SignBlock(account accounts.Account, block *types.Block, chainID *big.Int) (*types.Block, error) {
+	signer := types.NewBlockSigner(chainID)
+	hash := signer.BlockHash(block.Header())
+	sig, err := w.signHash(account, hash[:])
+	if err != nil {
+		return nil, err
+	}
+	return block.WithBlockSignature(signer, sig)
+}
+
 // SignDataWithPassphrase requests the wallet to sign the given hash with the
 // given passphrase as extra authentication information.
 //
