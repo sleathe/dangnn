@@ -857,7 +857,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 
 		state := w.current.state.Copy()
 		if state.IsMiner(w.coinbase) == 0 	{
-			log.Error("Refusing to mine without authority")
+			log.Error("Refusing to mine without authority" + w.coinbase.String())
 			return
 		}
 
