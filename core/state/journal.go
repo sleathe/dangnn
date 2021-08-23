@@ -190,7 +190,7 @@ func (ch nonceChange) dirtied() *common.Address {
 }
 
 func (ch minerChange) revert(s *StateDB) {
-	s.getStateObject(*ch.account).setNonce(ch.prev)
+	s.getStateObject(*ch.account).setMiner(ch.prev)
 }
 
 func (ch minerChange) dirtied() *common.Address {
