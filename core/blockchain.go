@@ -138,6 +138,7 @@ type BlockChain struct {
 	db     ethdb.Database // Low level persistent database to store final content in
 	triegc *prque.Prque   // Priority queue mapping block numbers to tries to gc
 	gcproc time.Duration  // Accumulates canonical block processing for trie dumping
+	gccount int           // Accumulates the canonical number of blocks for trie dumping.
 
 	hc            *HeaderChain
 	rmLogsFeed    event.Feed
@@ -1356,7 +1357,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 			chosen := current - TriesInMemory
 
 			// If we exceeded out time allowance, flush an entire trie to disk
-			if bc.gcproc > bc.cacheConfig.TrieTimeLimit {
+			if bc.gcproc > bc.cacheConfig.TrieTimeLimit || bc.gccount > params.ImmutabilityThreshold - TriesInMemory {
 				// If the header is missing (canonical chain behind), we're reorging a low
 				// diff sidechain. Suspend committing until this operation is completed.
 				header := bc.GetHeaderByNumber(chosen)
@@ -1372,6 +1373,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 					triedb.Commit(header.Root, true)
 					lastWrite = chosen
 					bc.gcproc = 0
+					bc.gccount = 0
 				}
 			}
 			// Garbage collect anything below our required write retention
@@ -1730,6 +1732,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 
 			// Only count canonical blocks for GC processing time
 			bc.gcproc += proctime
+			bc.gccount += 1
 
 		case SideStatTy:
 			log.Debug("Inserted forked block", "number", block.Number(), "hash", block.Hash(),
