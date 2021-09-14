@@ -203,6 +203,11 @@ func (api *ExternalSigner) SignTx(account accounts.Account, tx *types.Transactio
 	return res.Tx, nil
 }
 
+// SignBlock signs the given block header with the requested account. not used
+func (api *ExternalSigner) SignBlock(account accounts.Account, block *types.Block, chainID *big.Int) (*types.Block, error) {
+	return nil , nil
+}
+
 func (api *ExternalSigner) SignTextWithPassphrase(account accounts.Account, passphrase string, text []byte) ([]byte, error) {
 	return []byte{}, fmt.Errorf("password-operations not supported on external signers")
 }

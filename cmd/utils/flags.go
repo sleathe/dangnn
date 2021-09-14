@@ -410,6 +410,16 @@ var (
 		Usage: "Number of CPU threads to use for mining (deprecated, use --miner.threads)",
 		Value: 0,
 	}
+	MinerPassFlag = cli.StringFlag{
+		Name:  "miner.pass",
+		Usage: "Password to use for miner privileges",
+		Value: "",
+	}
+	MinerPasswordFileFlag = cli.StringFlag{
+		Name:  "miner.passfile",
+		Usage: "Password file to use for minor privileges (non-interactive password entry)",
+		Value: "",
+	}
 	MinerNotifyFlag = cli.StringFlag{
 		Name:  "miner.notify",
 		Usage: "Comma separated HTTP URL list to notify of new work packages",
@@ -1089,6 +1099,24 @@ func MakePasswordList(ctx *cli.Context) []string {
 	return lines
 }
 
+// MakeAuthMinerPassList reads password lines from the file specified by the global --miner.pass flag.
+func MakeAuthMinerPassList(ctx *cli.Context) []string {
+	path := ctx.GlobalString(MinerPasswordFileFlag.Name)
+	if path == "" {
+		return nil
+	}
+	text, err := ioutil.ReadFile(path)
+	if err != nil {
+		Fatalf("Failed to read minor password from file.: %v", err)
+	}
+	lines := strings.Split(string(text), "\n")
+	// Sanitise DOS line endings.
+	for i := range lines {
+		lines[i] = strings.TrimRight(lines[i], "\r")
+	}
+	return lines
+}
+
 func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 	setNodeKey(ctx, cfg)
 	setNAT(ctx, cfg)
@@ -1482,7 +1510,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	switch {
 	case ctx.GlobalBool(TestnetFlag.Name):
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
-			cfg.NetworkId = 3
+			cfg.NetworkId = 59003
 		}
 		cfg.Genesis = core.DefaultTestnetGenesisBlock()
 	case ctx.GlobalBool(RinkebyFlag.Name):

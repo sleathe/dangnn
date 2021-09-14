@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
@@ -107,7 +109,25 @@ func NewPrivateMinerAPI(e *Ethereum) *PrivateMinerAPI {
 // usable by this process. If mining is already running, this method adjust the
 // number of threads allowed to use and updates the minimum price required by the
 // transaction pool.
-func (api *PrivateMinerAPI) Start(threads *int) error {
+func (api *PrivateMinerAPI) Start(threads *int, passphrase string) error {
+	// Configure the local mining address
+	eb, err := api.e.Etherbase()
+	if err != nil {
+		return fmt.Errorf("etherbase missing: %v", err)
+	}
+
+	ks := api.e.accountManager.Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
+	if passphrase != "" || !ks.IsLockMiner(eb) {
+		block := api.e.BlockChain().CurrentBlock()
+		if api.e.BlockChain().IsMiner(block.Root(),eb,block.NumberU64()) == 0 {
+			return fmt.Errorf("Cannot start mining without etherbase authority(ipc)")
+		}
+		err = ks.UnlockMiner(accounts.Account{Address: eb}, passphrase)
+		if err != nil {
+			return fmt.Errorf("invalid passphrase: %v", err)
+		}
+	}
+
 	if threads == nil {
 		return api.e.StartMining(runtime.NumCPU())
 	}
@@ -140,6 +160,12 @@ func (api *PrivateMinerAPI) SetGasPrice(gasPrice hexutil.Big) bool {
 
 // SetEtherbase sets the etherbase of the miner
 func (api *PrivateMinerAPI) SetEtherbase(etherbase common.Address) bool {
+	// Cannot be changed while mining
+	if api.e.IsMining() {
+		fmt.Errorf("setEtherbase error: Cannot be set while mining")
+		return false
+	}
+
 	api.e.SetEtherbase(etherbase)
 	return true
 }

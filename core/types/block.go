@@ -83,6 +83,11 @@ type Header struct {
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
 	MixDigest   common.Hash    `json:"mixHash"`
 	Nonce       BlockNonce     `json:"nonce"`
+
+	// Signature values
+	V *big.Int `json:"v" gencodec:"required"`
+	R *big.Int `json:"r" gencodec:"required"`
+	S *big.Int `json:"s" gencodec:"required"`
 }
 
 // field type overrides for gencodec
@@ -93,6 +98,9 @@ type headerMarshaling struct {
 	GasUsed    hexutil.Uint64
 	Time       hexutil.Uint64
 	Extra      hexutil.Bytes
+	V          *hexutil.Big
+	R          *hexutil.Big
+	S          *hexutil.Big
 	Hash       common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
 }
 
@@ -107,7 +115,7 @@ var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
 // Size returns the approximate memory used by all internal contents. It is used
 // to approximate and limit the memory consumption of various caches.
 func (h *Header) Size() common.StorageSize {
-	return headerSize + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen())/8)
+	return headerSize + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen()+h.V.BitLen()+h.R.BitLen()+h.S.BitLen())/8)
 }
 
 // SanityCheck checks a few basic things -- these checks are way beyond what
@@ -252,7 +260,44 @@ func CopyHeader(h *Header) *Header {
 		cpy.Extra = make([]byte, len(h.Extra))
 		copy(cpy.Extra, h.Extra)
 	}
+
+	if cpy.V = new(big.Int); h.V != nil {
+		cpy.V.Set(h.V)
+	}
+	if cpy.R = new(big.Int); h.R != nil {
+		cpy.R.Set(h.R)
+	}
+	if cpy.S = new(big.Int); h.S != nil {
+		cpy.S.Set(h.S)
+	}
+
 	return &cpy
+}
+
+// ChainId returns which chain id this transaction was signed for (if at all)
+func (h *Header) ChainId() *big.Int {
+	return deriveBlockChainId(h.V)
+}
+
+// Protected returns whether the transaction is protected from replay protection.
+func (h *Header) Protected() bool {
+	return isProtectedV(h.V)
+}
+
+// WithBlockSignature returns a new Block with the given signature.
+// This signature needs to be in the [R || S || V] format where V is 0 or 1.
+func (b *Block) WithBlockSignature(signer BlockSigner, sig []byte) (*Block, error) {
+	r, s, v, err := signer.BlockSignatureValues(nil, sig)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set it directly into the block header.
+	b.header.V = v
+	b.header.R = r
+	b.header.S = s
+
+	return b, nil
 }
 
 // DecodeRLP decodes the Ethereum

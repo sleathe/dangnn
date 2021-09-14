@@ -200,6 +200,20 @@ func (c *Console) init(preload []string) error {
 		obj.Set("sleep", bridge.Sleep)
 		obj.Set("clearHistory", c.clearHistory)
 	}
+
+	miner, err := c.jsre.Get("miner")
+	if err != nil {
+		return err
+	}
+	if obj := miner.Object(); obj != nil { // make sure the admin api is enabled over the interface
+
+		if _, err = c.jsre.Run(`jeth.start = miner.start;`); err != nil {
+			return fmt.Errorf("miner.start: %v", err)
+		}
+
+		obj.Set("start", bridge.Start)
+	}
+
 	// Preload any JavaScript files before starting the console
 	for _, path := range preload {
 		if err := c.jsre.Exec(path); err != nil {

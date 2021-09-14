@@ -464,6 +464,23 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 			clique.Authorize(eb, wallet.SignData)
 		}
+
+		if ethash, ok := s.engine.(*ethash.Ethash); ok {
+			// Ether base must have mining privileges.
+			block := s.blockchain.CurrentBlock()
+			if s.blockchain.IsMiner(block.Root(),eb,block.NumberU64()) == 0 {
+				log.Error("Cannot start mining without etherbase authority")
+				return fmt.Errorf("etherbase missing: etherbase authority")
+			}
+
+			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return fmt.Errorf("signer missing: %v", err)
+			}
+
+			ethash.Authorize(eb, wallet.SignBlock)
+		}
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.
 		atomic.StoreUint32(&s.protocolManager.acceptTxs, 1)

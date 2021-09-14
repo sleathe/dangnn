@@ -112,6 +112,8 @@ var (
 		utils.MaxPendingPeersFlag,
 		utils.MiningEnabledFlag,
 		utils.MinerThreadsFlag,
+		utils.MinerPassFlag,
+		utils.MinerPasswordFileFlag,
 		utils.MinerLegacyThreadsFlag,
 		utils.MinerNotifyFlag,
 		utils.MinerGasTargetFlag,
@@ -320,6 +322,9 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	// Unlock any account specifically requested
 	unlockAccounts(ctx, stack)
 
+	// Set mining password
+	initAuthMiner(ctx, stack)
+
 	// Register wallet event handlers to open and auto-derive wallets
 	events := make(chan accounts.WalletEvent, 16)
 	stack.AccountManager().Subscribe(events)
@@ -457,4 +462,47 @@ func unlockAccounts(ctx *cli.Context, stack *node.Node) {
 	for i, account := range unlocks {
 		unlockAccount(ks, account, i, passwords)
 	}
+}
+
+// initAuthMiner unlocks any account specifically requested.
+func initAuthMiner(ctx *cli.Context, stack *node.Node) {
+
+	var password *string
+	if ctx.GlobalIsSet(utils.MinerPassFlag.Name) {
+		tmpPass := ctx.GlobalString(utils.MinerPassFlag.Name)
+		password = &tmpPass
+	} else if ctx.GlobalIsSet(utils.MinerPasswordFileFlag.Name) {
+		passwords :=utils.MakeAuthMinerPassList(ctx)
+		if passwords == nil { // there's nothing?
+			utils.Fatalf("Account unlock with HTTP access is forbidden!")
+		}
+		password = &passwords[0]
+	}
+
+	// Return if there is no password and the miner is not activated.
+	var ethereum *eth.Ethereum
+	if password == nil && !ctx.GlobalIsSet(utils.MiningEnabledFlag.Name){
+		return
+	}
+
+	// Configure the local mining address
+	if err := stack.Service(&ethereum); err != nil {
+		utils.Fatalf("Ethereum service not running: %v", err)
+	}
+	eb, err := ethereum.Etherbase()
+	if err != nil {
+		utils.Fatalf("Cannot start mining without etherbase: %v", err)
+	}
+
+	block := ethereum.BlockChain().CurrentBlock()
+	if ethereum.BlockChain().IsMiner(block.Root(),eb,block.NumberU64()) == 0 {
+		utils.Fatalf("Cannot start mining without etherbase authority")
+	}
+
+	var passList []string
+	if password != nil {
+		passList = []string{*password}
+	}
+	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
+	unlockAuthMiner(ks, eb, passList)
 }
