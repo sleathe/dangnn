@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -1411,6 +1412,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 			if err := bc.reorg(currentBlock, block); err != nil {
 				return NonStatTy, err
 			}
+			if ethash, ok := bc.Engine().(*ethash.Ethash); ok {
+				ethash.Snapshot(bc,bc.CurrentBlock().Header(),nil)
+			}
 		}
 		status = CanonStatTy
 	} else {
@@ -1419,6 +1423,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Set new head.
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
+		if ethash, ok := bc.Engine().(*ethash.Ethash); ok {
+			ethash.Snapshot(bc,bc.CurrentBlock().Header(),nil)
+		}
 	}
 	bc.futureBlocks.Remove(block.Hash())
 
@@ -1581,7 +1588,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 	switch {
 	// First block is pruned, insert as sidechain and reorg only if TD grows enough
 	case err == consensus.ErrPrunedAncestor:
-		log.Debug("Pruned ancestor, inserting as sidechain", "number", block.Number(), "hash", block.Hash())
+		log.Info("Pruned ancestor, inserting as sidechain", "number", block.Number(), "hash", block.Hash())
 		return bc.insertSideChain(block, it)
 
 	// First block is future, shove it (and all children) to the future queue (unknown ancestor)
@@ -1677,6 +1684,14 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
+		}
+		if ethash, ok := bc.Engine().(*ethash.Ethash); ok {
+			_, err := ethash.ValidSnapShot(bc, block.NumberU64(), block.Header().Election)
+			if err != nil {
+				bc.reportBlock(block, receipts, err)
+				atomic.StoreUint32(&followupInterrupt, 1)
+				return it.index, err
+			}
 		}
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)     // Account reads are complete, we can mark them
@@ -2020,6 +2035,10 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	for i := len(newChain) - 1; i >= 1; i-- {
 		// Insert the block in the canonical way, re-writing history
 		bc.writeHeadBlock(newChain[i])
+
+		if ethash, ok := bc.Engine().(*ethash.Ethash); ok {
+			ethash.Snapshot(bc,bc.CurrentBlock().Header(),nil)
+		}
 
 		// Collect reborn logs due to chain reorg
 		collectLogs(newChain[i].Hash(), false)

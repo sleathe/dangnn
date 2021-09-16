@@ -526,6 +526,7 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 
 	newobj = newObject(s, addr, Account{})
 	newobj.setNonce(0) // sets the object to dirty
+	//newobj.setMiner(0) // sets the object to dirty
 	if prev == nil {
 		s.journal.append(createObjectChange{account: &addr})
 	} else {

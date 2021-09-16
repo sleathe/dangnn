@@ -36,4 +36,6 @@ var (
 	ErrInvalidNumber = errors.New("invalid block number")
 
 	ErrInvalidMiner = errors.New("invalid block coinbase")
+
+	ErrInvalidElection = errors.New("invalid block election data")
 )

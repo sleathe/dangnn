@@ -392,7 +392,7 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 			CachesOnDisk:   3,
 			DatasetsInMem:  1,
 			DatasetsOnDisk: 2,
-		}, nil, false)
+		}, nil, false, ethDb)
 	default:
 		return false, fmt.Errorf("unrecognised seal engine: %s", chainParams.SealEngine)
 	}
