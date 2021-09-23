@@ -20,6 +20,8 @@ package ethash
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"math"
 	"math/big"
 	"math/rand"
@@ -27,6 +29,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -51,13 +54,15 @@ var (
 	two256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
 
 	// sharedEthash is a full instance that can be shared between multiple users.
-	sharedEthash = New(Config{"", 3, 0, "", 1, 0, ModeNormal, nil}, nil, false)
+	sharedEthash = New(Config{"", 3, 0, "", 1, 0, ModeNormal, nil, 30000}, nil, false, nil)
 
 	// algorithmRevision is the data structure version used for file naming.
 	algorithmRevision = 23
 
 	// dumpMagic is a dataset dump header to sanity check a data dump.
 	dumpMagic = []uint32{0xbaddcafe, 0xfee1dead}
+
+	EthashEpoch = uint64(votesEpochLength)
 )
 
 // isLittleEndian returns whether the local system is running in little or big
@@ -410,6 +415,7 @@ type Config struct {
 	PowMode        Mode
 
 	Log log.Logger `toml:"-"`
+	Epoch  		   uint64   // Epoch length to reset votes and checkpoint
 }
 
 // Ethash is a consensus engine based on proof-of-work implementing the ethash
@@ -432,6 +438,11 @@ type Ethash struct {
 	fakeFail  uint64        // Block number which fails PoW check even in fake mode
 	fakeDelay time.Duration // Time delay to sleep for before returning from verify
 
+	db     ethdb.Database       // Database to store and retrieve snapshot checkpoints
+
+	recents    		*simplelru.LRU // Snapshots for recent block to speed up reorgs
+	proposals 		[]*Vote // Current list of proposals we are pushing
+
 	signer common.Address 		// Ethereum address of the signing key
 	signFn SignerBlockFn  		// Signer function to authorize hashes with
 	lockSigner   sync.RWMutex   // Protects the signer fields
@@ -443,7 +454,7 @@ type Ethash struct {
 // New creates a full sized ethash PoW scheme and starts a background thread for
 // remote mining, also optionally notifying a batch of remote services of new work
 // packages.
-func New(config Config, notify []string, noverify bool) *Ethash {
+func New(config Config, notify []string, noverify bool, db ethdb.Database) *Ethash {
 	if config.Log == nil {
 		config.Log = log.Root()
 	}
@@ -457,12 +468,21 @@ func New(config Config, notify []string, noverify bool) *Ethash {
 	if config.DatasetDir != "" && config.DatasetsOnDisk > 0 {
 		config.Log.Info("Disk storage enabled for ethash DAGs", "dir", config.DatasetDir, "count", config.DatasetsOnDisk)
 	}
+
+	cache, _ := simplelru.NewLRU(int(config.Epoch), func(key, value interface{}) {
+		log.Trace("Evicted ethash recents election key:",key)
+	})
+
 	ethash := &Ethash{
 		config:   config,
 		caches:   newlru("cache", config.CachesInMem, newCache),
 		datasets: newlru("dataset", config.DatasetsInMem, newDataset),
 		update:   make(chan struct{}),
 		hashrate: metrics.NewMeterForced(),
+		db:		db,
+		recents: cache,
+		//recents: newlru("elect",int(config.Epoch), newElectionSet),
+		proposals:  make([]*Vote, 0, 3),
 	}
 	ethash.remote = startRemoteSealer(ethash, notify, noverify)
 	return ethash
@@ -477,6 +497,8 @@ func NewTester(notify []string, noverify bool) *Ethash {
 		datasets: newlru("dataset", 1, newDataset),
 		update:   make(chan struct{}),
 		hashrate: metrics.NewMeterForced(),
+		db:		rawdb.NewMemoryDatabase(),
+		proposals:  make([]*Vote, 0, 3),
 	}
 	ethash.remote = startRemoteSealer(ethash, notify, noverify)
 	return ethash
@@ -665,13 +687,13 @@ func (ethash *Ethash) APIs(chain consensus.ChainReader) []rpc.API {
 		{
 			Namespace: "eth",
 			Version:   "1.0",
-			Service:   &API{ethash},
+			Service:   &API{ ethash, chain},
 			Public:    true,
 		},
 		{
 			Namespace: "ethash",
 			Version:   "1.0",
-			Service:   &API{ethash},
+			Service:   &API{ethash, chain},
 			Public:    true,
 		},
 	}
@@ -681,4 +703,408 @@ func (ethash *Ethash) APIs(chain consensus.ChainReader) []rpc.API {
 // dataset.
 func SeedHash(block uint64) []byte {
 	return seedHash(block)
+}
+
+func (ethash *Ethash) getSnapshot(checkNumber uint64) (*Election) {
+	ethash.lockSigner.Lock()
+	defer ethash.lockSigner.Unlock()
+	if s, ok := ethash.recents.Get(checkNumber); ok {
+		snap := s.(*Election)
+		// If you have a recently created snapshot, load it and start
+		return snap
+	}
+	return nil
+}
+
+// GetSnapshot shows a cache of election-related information.
+func (ethash *Ethash) GetSnapshot(chain consensus.ChainReader, header *types.Header) *Election{
+	checkNumber := header.Number.Uint64()/ethash.config.Epoch + 1
+	var snap *Election
+
+	snap = ethash.getSnapshot(checkNumber)
+	if snap != nil {
+		return snap
+	}
+
+	// If it is not in the cache, a new snapshot is created.
+	snap = newElection(checkNumber, nil, ethash.config.Epoch)
+	// If a snapshot is newly created, it must be read in its entirety.
+	// It is not stored in the cache list.
+	err := snap.CheckFullBlock(chain)
+	if err != nil {
+		return nil
+	}
+	return snap
+}
+
+// GetSnapshots shows the list in the cache
+func (ethash *Ethash) GetSnapshots() []Election{
+	snapList := make([]Election,0)
+	for _, k := range ethash.recents.Keys(){
+		if s, ok := ethash.recents.Get(k); ok {
+			snap := s.(*Election)
+			if snap.Total != 99 {
+				snapList = append(snapList,*snap)
+			}
+		}
+	}
+	return snapList
+}
+
+// Proposals shows a list of proposers.
+func (ethash *Ethash) Proposals() []*Vote {
+	ethash.lockSigner.RLock()
+	defer ethash.lockSigner.RUnlock()
+
+	proposals := make([]*Vote,len(ethash.proposals))
+	copy(proposals, ethash.proposals)
+	return proposals
+}
+
+// AddPropose injects a new authorization proposal that the signer will attempt to
+// push through.
+func (ethash *Ethash) AddPropose(chain consensus.ChainReader, address common.Address, keepalive uint64, priority int) (*Vote, error) {
+	// Does the address already have mining rights?
+	isMine := chain.IsMiner(chain.CurrentHeader().Root,address,chain.CurrentHeader().Number.Uint64())
+	if isMine > 0 {
+		return nil, errors.New("miner who already has authority")
+	}
+
+	ethash.lockSigner.Lock()
+	defer ethash.lockSigner.Unlock()
+
+	// Already on the offer list?
+	apply := false
+	dept := uint64(0)
+	for  idx, propose := range ethash.proposals {
+		if propose.Addr == address {
+			if propose.Apply == true && propose.ApplyDept > chain.CurrentHeader().Number.Uint64() {
+				return propose, errors.New("already registered on the propose list")
+			}
+
+			// Default applied value
+			apply = propose.Apply
+			dept = propose.ApplyDept
+			// Delete from the existing list
+			ethash.proposals = append(ethash.proposals[:idx],ethash.proposals[idx+1:]...)
+			break
+		}
+	}
+	vote := &Vote{
+		Addr:      address,
+		Auth:      false,
+		Keepalive: keepalive,
+		Priority:  priority,
+		Apply:     apply,
+		ApplyDept: dept,
+	}
+	ethash.proposals = append(ethash.proposals, vote)
+	// Let's sort by priority.
+	sort.Sort(VoteByPriority(ethash.proposals))
+
+	return vote, nil
+}
+
+// DeletePropose drops a currently running proposal, stopping the signer from casting
+// further votes (either for or against).
+func (ethash *Ethash) DeletePropose(address common.Address) error {
+	// Has it already been applied?
+	ethash.lockSigner.Lock()
+	defer ethash.lockSigner.Unlock()
+
+	for index, value := range ethash.proposals {
+		if value.Addr == address {
+			ethash.proposals = append(ethash.proposals[:index], ethash.proposals[index+1:]...)
+			return  nil
+		}
+	}
+
+	return nil
+}
+
+
+// SearchPropose finds data to be registered in the candidate list.
+func (ethash *Ethash) SearchPropose(chain consensus.ChainReader, header *types.Header) {
+	if len(ethash.proposals) == 0 {
+		return
+	}
+
+	ethash.lockSigner.RLock()
+	defer ethash.lockSigner.RUnlock()
+	// Let's pick out those who already have authority from the suggested list.
+	for _, propose := range ethash.proposals {
+		if propose.Auth == false && propose.ApplyDept <= header.Number.Uint64() {
+			parent := chain.GetBlock(header.ParentHash, header.Number.Uint64()-1)
+			if parent == nil {
+				continue
+			}
+			authMiner := chain.IsMiner(parent.Root(),propose.Addr,header.Number.Uint64())
+			if authMiner > 0 {
+				propose.Auth = true
+			}
+		}
+	}
+	index := 0
+	// Let's select from the proposed candidates and add x names to the block header.
+	for _, propose := range ethash.proposals {
+		if propose.Auth == false {
+			if (propose.Apply != true || propose.ApplyDept <= header.Number.Uint64()) && propose.Keepalive > header.Number.Uint64() {
+				header.Election = append(header.Election, propose.Addr[:]...)
+				index++
+				if index >= candidatePerBlock {
+					break
+				}
+			}
+		}
+	}
+}
+
+// ApplyPropose is actually applied to the proposer.
+func (ethash *Ethash) ApplyPropose(header *types.Header, apply bool) error {
+	// Has it already been applied?
+	if len(header.Election) == 0 {
+		return nil
+	}
+	number := header.Number.Uint64()
+	dept := uint64((number/ethash.config.Epoch + 1) * ethash.config.Epoch)
+
+	ethash.lockSigner.Lock()
+	defer ethash.lockSigner.Unlock()
+
+	for i := 0; i < len(header.Election)/common.AddressLength ; i++ {
+		addr := common.BytesToAddress(header.Election[i*common.AddressLength: (i+1)*common.AddressLength])
+		for i := 0; i < len(ethash.proposals); i++ {
+			if ethash.proposals[i].Addr == addr{
+				ethash.proposals[i].Apply = apply
+				ethash.proposals[i].ApplyDept = dept
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// makeSliceUnique delete duplicate data.
+func makeSliceUnique(s []common.Address) []common.Address {
+	keys := make(map[common.Address]struct{})
+	res := make([]common.Address, 0)
+	for _, val := range s {
+		if _, ok := keys[val]; ok {
+			continue
+		} else {
+			keys[val] = struct{}{}
+			res = append(res, val)
+		}
+	}
+	return res
+}
+
+// SearchFullBlock reads data directly from the blockchain and checks the election data.
+func (ethash *Ethash) SearchFullBlock(chain consensus.ChainReader, head *types.Header) ([]byte, error) {
+	number := head.Number.Uint64()
+	if number%ethash.config.Epoch != 0 || number == 0 {
+		return nil, nil
+	}
+
+	lastNumber := head.Number.Uint64() - ethash.config.Epoch + 1
+
+	var (
+		header *types.Header
+	)
+
+	header = head
+
+	minerVotes := make(map[common.Address]uint64)
+	tmp := make(map[common.Address][]common.Address)
+
+	for {
+		if lastNumber >= number {
+			break
+		}
+
+		header = chain.GetHeader(header.ParentHash, number-1)
+		if header == nil {
+			log.Crit("It is an unknown block. block: ",header.ParentHash, number-1)
+			return nil, consensus.ErrUnknownAncestor
+		}
+		minerVotes[header.Coinbase] += 1
+		if len(header.Election) > 0 {
+			for i := 0; i < len(header.Election)/common.AddressLength ; i++ {
+				tmp[common.BytesToAddress(header.Election[i*common.AddressLength: (i+1)*common.AddressLength])] = append(tmp[common.BytesToAddress(header.Election[i*common.AddressLength: (i+1)*common.AddressLength])],header.Coinbase)
+			}
+		}
+		number = number - 1
+	}
+
+	if len(tmp) <= 0 {
+		return nil, nil
+	}
+
+	var (
+		sum uint64
+	)
+	addrList := make(signersAscending,0,len(tmp))
+	for prop, coinbase := range tmp {
+		sum = 0
+		coinbase = makeSliceUnique(coinbase) // Deduplication
+		for _, addrMiner := range coinbase {
+			sum += minerVotes[addrMiner]
+		}
+		if sum > ethash.config.Epoch/votesPerRate {
+			addrList = append(addrList, prop)
+		}
+	}
+	if len(addrList) <= 0 {
+		return nil, nil
+	}
+	sort.Sort(addrList)
+	_, byteHash := Decode(addrList)
+	return byteHash, nil
+}
+
+// GetElectionData enters the mining rights in the state db.
+func (ethash *Ethash) GetElectionData(chain consensus.ChainReader, number uint64) (signersAscending,error) {
+	checkNumber := number/ethash.config.Epoch
+	var snap *Election
+
+	ethash.lockSigner.Lock()
+	if s, ok := ethash.recents.Get(checkNumber); ok {
+		snap = s.(*Election)
+		// If you have a recently created snapshot, load it and start
+	} else {
+		//If not, create a new snapshot.
+		snap = newElection(checkNumber, nil, ethash.config.Epoch)
+		ethash.recents.Add(snap.Key, snap)
+	}
+	ethash.lockSigner.Unlock()
+
+	// If a snapshot is newly created, it must be read in its entirety.
+	err := snap.CheckFullBlock(chain)
+	if err != nil {
+		return nil, err
+	}
+
+	return snap.Selected(), nil
+}
+
+func (ethash *Ethash) GetSnapshotHash(chain consensus.ChainReader, number uint64) ([]byte,error) {
+	checkNumber := number/ethash.config.Epoch
+	var snap *Election
+
+	ethash.lockSigner.Lock()
+	if s, ok := ethash.recents.Get(checkNumber); ok {
+		snap = s.(*Election)
+		// If you have a recently created snapshot, load it and start
+	} else {
+		// If not, create a new snapshot.
+		snap = newElection(checkNumber, nil, ethash.config.Epoch)
+		ethash.recents.Add(snap.Key, snap)
+	}
+	ethash.lockSigner.Unlock()
+
+	addrList := snap.Selected()
+	if len(addrList) == 0 {
+		return nil, nil
+	}
+
+	sort.Sort(addrList)
+	_, byteHash := Decode(addrList)
+
+	return byteHash, nil
+}
+
+
+func (ethash *Ethash) ValidSnapShot(chain consensus.ChainReader, number uint64, election []byte) (common.Hash, error) {
+	if number%ethash.config.Epoch != 0 {
+		return common.Hash{}, nil
+	}
+
+	// Reads data with the previous number one block
+	checkNumber :=  (number - 1)/ethash.config.Epoch + 1
+	var (
+		snap *Election
+	)
+
+	// Do you have any recent snapshots?
+	ethash.lockSigner.Lock()
+	if s, ok := ethash.recents.Get(checkNumber); ok {
+		snap = s.(*Election)
+		// If you have a recently created snapshot, load it and start
+	} else {
+		// If not, create a new snapshot.
+		snap = newElection(checkNumber, nil, ethash.config.Epoch)
+		ethash.recents.Add(snap.Key, snap)
+	}
+	ethash.lockSigner.Unlock()
+
+	// If a snapshot is newly created, it must be read in its entirety.
+	err := snap.CheckFullBlock(chain)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	return snap.ValidSnapShot(chain, election)
+}
+
+// Snapshot retrieves the authorization snapshot at a given point in time.
+func (ethash *Ethash) Snapshot(chain consensus.ChainReader, head *types.Header, parents []*types.Header) (*Election, error) {
+	// Retrieves the voting snapshot for the header of the block.
+	//If it is in the cache, read it from the cache.
+	var (
+		headers []*types.Header
+		snap   	*Election
+		checkNumber uint64
+		number 		uint64
+		hash 		common.Hash
+		header *types.Header
+	)
+	header = head
+	number, hash = header.Number.Uint64() , header.Hash()
+	checkNumber =  (number-1)/ethash.config.Epoch+1
+
+	ethash.lockSigner.Lock()
+	// Do you have any recent snapshots?
+	if s, ok := ethash.recents.Get(checkNumber); ok {
+		snap = s.(*Election)
+		// If you have a recently created snapshot, load it and start
+	} else {
+		//If not, create a new snapshot.
+		snap = newElection(checkNumber, nil, ethash.config.Epoch)
+		ethash.recents.Add(snap.Key, snap)
+	}
+	ethash.lockSigner.Unlock()
+
+	// As it goes through the loop, it creates sub-snapshots. (Let's make it rotate until the epoch is 0)
+	for {
+		ret := snap.Add(number, hash, header.Coinbase, header.Election)
+		if !ret {
+			return snap, nil
+		}
+		if number%ethash.config.Epoch == 0 {
+			break
+		}
+		headers = append(headers, header)
+
+		// Let's go back and get the information in the header.
+		if len(parents) > 0 {
+			// If we have explicit parents, pick from there (enforced)
+			header = parents[len(parents)-1]
+			if header.Hash() != hash || header.Number.Uint64() != number {
+				return nil, consensus.ErrUnknownAncestor
+			}
+			parents = parents[:len(parents)-1]
+		} else {
+			// No explicit parents (or no more left), reach out to the database
+			header = chain.GetHeader(header.ParentHash, number-1)
+			if header == nil {
+				// If you haven't found the next block and haven't entered it yet, you may not be able to find it.
+				log.Error("Block data could not be found in the chain. parent:%d number:%d",header.ParentHash, number-1)
+				return snap, nil
+			}
+		}
+
+		number, hash = number-1, header.Hash()
+	}
+
+	return snap, nil
 }

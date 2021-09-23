@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -138,6 +139,7 @@ type BlockChain struct {
 	db     ethdb.Database // Low level persistent database to store final content in
 	triegc *prque.Prque   // Priority queue mapping block numbers to tries to gc
 	gcproc time.Duration  // Accumulates canonical block processing for trie dumping
+	gccount int           // Accumulates the canonical number of blocks for trie dumping.
 
 	hc            *HeaderChain
 	rmLogsFeed    event.Feed
@@ -1356,7 +1358,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 			chosen := current - TriesInMemory
 
 			// If we exceeded out time allowance, flush an entire trie to disk
-			if bc.gcproc > bc.cacheConfig.TrieTimeLimit {
+			if bc.gcproc > bc.cacheConfig.TrieTimeLimit || bc.gccount > params.ImmutabilityThreshold - TriesInMemory {
 				// If the header is missing (canonical chain behind), we're reorging a low
 				// diff sidechain. Suspend committing until this operation is completed.
 				header := bc.GetHeaderByNumber(chosen)
@@ -1372,6 +1374,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 					triedb.Commit(header.Root, true)
 					lastWrite = chosen
 					bc.gcproc = 0
+					bc.gccount = 0
 				}
 			}
 			// Garbage collect anything below our required write retention
@@ -1409,6 +1412,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 			if err := bc.reorg(currentBlock, block); err != nil {
 				return NonStatTy, err
 			}
+			if ethash, ok := bc.Engine().(*ethash.Ethash); ok {
+				ethash.Snapshot(bc,bc.CurrentBlock().Header(),nil)
+			}
 		}
 		status = CanonStatTy
 	} else {
@@ -1417,6 +1423,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Set new head.
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
+		if ethash, ok := bc.Engine().(*ethash.Ethash); ok {
+			ethash.Snapshot(bc,bc.CurrentBlock().Header(),nil)
+		}
 	}
 	bc.futureBlocks.Remove(block.Hash())
 
@@ -1579,7 +1588,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 	switch {
 	// First block is pruned, insert as sidechain and reorg only if TD grows enough
 	case err == consensus.ErrPrunedAncestor:
-		log.Debug("Pruned ancestor, inserting as sidechain", "number", block.Number(), "hash", block.Hash())
+		log.Info("Pruned ancestor, inserting as sidechain", "number", block.Number(), "hash", block.Hash())
 		return bc.insertSideChain(block, it)
 
 	// First block is future, shove it (and all children) to the future queue (unknown ancestor)
@@ -1676,6 +1685,14 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
 		}
+		if ethash, ok := bc.Engine().(*ethash.Ethash); ok {
+			_, err := ethash.ValidSnapShot(bc, block.NumberU64(), block.Header().Election)
+			if err != nil {
+				bc.reportBlock(block, receipts, err)
+				atomic.StoreUint32(&followupInterrupt, 1)
+				return it.index, err
+			}
+		}
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)     // Account reads are complete, we can mark them
 		storageReadTimer.Update(statedb.StorageReads)     // Storage reads are complete, we can mark them
@@ -1730,6 +1747,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 
 			// Only count canonical blocks for GC processing time
 			bc.gcproc += proctime
+			bc.gccount += 1
 
 		case SideStatTy:
 			log.Debug("Inserted forked block", "number", block.Number(), "hash", block.Hash(),
@@ -2017,6 +2035,10 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	for i := len(newChain) - 1; i >= 1; i-- {
 		// Insert the block in the canonical way, re-writing history
 		bc.writeHeadBlock(newChain[i])
+
+		if ethash, ok := bc.Engine().(*ethash.Ethash); ok {
+			ethash.Snapshot(bc,bc.CurrentBlock().Header(),nil)
+		}
 
 		// Collect reborn logs due to chain reorg
 		collectLogs(newChain[i].Hash(), false)

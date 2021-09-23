@@ -81,6 +81,7 @@ type Header struct {
 	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
 	Time        uint64         `json:"timestamp"        gencodec:"required"`
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
+	Election	[]byte		   `json:"election"         gencodec:"required"`
 	MixDigest   common.Hash    `json:"mixHash"`
 	Nonce       BlockNonce     `json:"nonce"`
 
@@ -98,6 +99,7 @@ type headerMarshaling struct {
 	GasUsed    hexutil.Uint64
 	Time       hexutil.Uint64
 	Extra      hexutil.Bytes
+	Election   hexutil.Bytes
 	V          *hexutil.Big
 	R          *hexutil.Big
 	S          *hexutil.Big
@@ -176,6 +178,10 @@ type Block struct {
 // new, after which it should be deleted. Do not use!
 func (b *Block) DeprecatedTd() *big.Int {
 	return b.td
+}
+
+func (b *Block) String() string  {
+	return fmt.Sprintf("num:%s",b.ReceivedAt.String())
 }
 
 // [deprecated by eth/63]
@@ -260,7 +266,10 @@ func CopyHeader(h *Header) *Header {
 		cpy.Extra = make([]byte, len(h.Extra))
 		copy(cpy.Extra, h.Extra)
 	}
-
+	if len(h.Election) > 0 {
+		cpy.Election = make([]byte, len(h.Election))
+		copy(cpy.Election, h.Election)
+	}
 	if cpy.V = new(big.Int); h.V != nil {
 		cpy.V.Set(h.V)
 	}

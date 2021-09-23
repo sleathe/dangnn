@@ -141,6 +141,34 @@ web3._extend({
 			call: 'ethash_submitHashRate',
 			params: 2,
 		}),
+		new web3._extend.Method({
+			name: 'propose',
+			call: 'ethash_propose',
+			params: 3,
+			inputFormatter: [web3._extend.formatters.inputAddressFormatter, null, null]
+		}),
+		new web3._extend.Method({
+			name: 'discard',
+			call: 'ethash_discard',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getElection',
+			call: 'ethash_getElection',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getElections',
+			call: 'ethash_getElections',
+			params: 0
+		}),
+	],
+	properties: [
+		new web3._extend.Property({
+			name: 'proposals',
+			getter: 'ethash_proposals'
+		}),
 	]
 });
 `

@@ -288,23 +288,24 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 		return consensus.ErrInvalidNumber
 	}
 
+	// Check if the miner has permission.
 	minerAddr, err := types.BlockSender(types.MakeBlockSigner(chain.Config()),header)
 	if err != nil {
 		return consensus.ErrInvalidMiner
 	}
-
 	if !bytes.Equal(header.Coinbase.Bytes(),minerAddr.Bytes()) {
 		return consensus.ErrInvalidMiner
 	}
-
 	if checkMiner {
 		authMiner := chain.IsMiner(parent.Root,header.Coinbase,header.Number.Uint64())
 		if authMiner == 0 {
 			return consensus.ErrInvalidMiner
 		}
 	}
-
-	// Verify the engine specific seal securing the block
+	// Election column validation.
+	if err := ethash.verifyElection(chain, header, checkMiner, uncle); err != nil {
+		return err
+	}
 	if seal {
 		if err := ethash.VerifySeal(chain, header); err != nil {
 			return err
@@ -316,6 +317,44 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	}
 	if err := misc.VerifyForkHashes(chain.Config(), header, uncle); err != nil {
 		return err
+	}
+	return nil
+}
+
+// verifyElection verifies voting columns
+func (ethash *Ethash) verifyElection(chain consensus.ChainReader, header *types.Header, checkMiner bool, uncle bool) error {
+	number := header.Number.Uint64()
+	checkpoint := (number % ethash.config.Epoch) == 0
+
+	if !checkpoint {
+		// voting block.
+		// It increases by the number of common.Address numbers,
+		// and Election cannot exceed common.Address 3.
+		electionSize := len(header.Election)
+		if electionSize > 0 {
+			if electionSize%common.AddressLength != 0 || electionSize > common.AddressLength*3 {
+				return fmt.Errorf("the size of the header election is wrong. block number: %d size: %d", number, electionSize)
+			}
+		}
+	} else {
+		// Settlement block check
+		electionSize := len(header.Election)
+		if electionSize != 0 && electionSize != common.HashLength {
+			return fmt.Errorf("the size of the header election is wrong. block number: %d size: %d", number, electionSize)
+		}
+		if checkMiner && !uncle {
+			// Uncle blocks are not checked.
+			// Voting settlement block. (You can also do it below. TBD)
+			snap, err := ethash.Snapshot(chain, header, nil)
+			if err != nil {
+				return err
+			}
+			// test code.
+			snapHash, err := snap.ValidSnapShot(chain, header.Election)
+			if err != nil {
+				return fmt.Errorf("this code is a test. verifyHeader: %s hash:%s", err, snapHash)
+			}
+		}
 	}
 	return nil
 }
@@ -588,6 +627,25 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
+	// Let's select 3 candidates from the proposed candidates and add them to the block header.
+	number := header.Number.Uint64()
+	if number%ethash.config.Epoch != 0{
+		// Search for input candidates.
+		ethash.SearchPropose(chain, header)
+	} else {
+		// Obtain the hash value of the candidate selected in the verification block.
+		// Find and write the actual registered data. (Need to check speed)
+		electionHash, _ := ethash.SearchFullBlock(chain, header)
+		if electionHash != nil {
+			header.Election = append(header.Election,electionHash...)
+		}
+
+		// testcode
+		snapHash, _ := ethash.GetSnapshotHash(chain, number)
+		if !bytes.Equal(electionHash,snapHash) {
+			panic(fmt.Sprintf("hash value is different search hash:%x snap hash:%x", electionHash,snapHash))
+		}
+	}
 	header.Difficulty = ethash.CalcDifficulty(chain, header.Time, parent)
 	return nil
 }
@@ -597,6 +655,11 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles)
+	number := header.Number.Uint64()
+	if number%ethash.config.Epoch == 0 && len(header.Election) > 0 {
+		electionData, _ := ethash.GetElectionData(chain, number)
+		addMinerAuth(ethash.config, state, header, electionData)
+	}
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 }
 
@@ -605,6 +668,11 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles)
+	number := header.Number.Uint64()
+	if number%ethash.config.Epoch == 0 && len(header.Election) > 0 {
+		electionData, _ := ethash.GetElectionData(chain, number)
+		addMinerAuth(ethash.config, state, header, electionData)
+	}
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 
 	// Header seems complete, assemble into a block and return
@@ -629,6 +697,7 @@ func (ethash *Ethash) SealHash(header *types.Header) (hash common.Hash) {
 		header.GasUsed,
 		header.Time,
 		header.Extra,
+		header.Election,
 	})
 	hasher.Sum(hash[:0])
 	return hash
@@ -666,4 +735,12 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		reward.Add(reward, r)
 	}
 	state.AddBalance(header.Coinbase, reward)
+}
+
+// addMinerAuth adds mining authority to the state db.
+func addMinerAuth(config Config, state *state.StateDB,header *types.Header, election signersAscending)  {
+	// Add mining permission.
+	for _, addr := range election {
+		state.SetAuthMiner(addr, header.Number.Uint64())
+	}
 }

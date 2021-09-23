@@ -19,6 +19,7 @@ package miner
 import (
 	"bytes"
 	"errors"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -597,6 +598,10 @@ func (w *worker) resultLoop() {
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
+			}
+			if ethash, ok := w.chain.Engine().(*ethash.Ethash); ok {
+				// If the proposer is included in the header, it is notified to the proposer list.
+				ethash.ApplyPropose(block.Header(), true)
 			}
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))

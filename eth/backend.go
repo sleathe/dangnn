@@ -201,6 +201,11 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
 
+	if ethash, ok := eth.engine.(*ethash.Ethash); ok {
+		ethash.Snapshot(eth.blockchain,eth.blockchain.CurrentBlock().Header(),nil)
+	}
+
+
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
 	checkpoint := config.Checkpoint
@@ -265,7 +270,8 @@ func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainCo
 			DatasetDir:     config.DatasetDir,
 			DatasetsInMem:  config.DatasetsInMem,
 			DatasetsOnDisk: config.DatasetsOnDisk,
-		}, notify, noverify)
+			Epoch: ethash.EthashEpoch,
+		}, notify, noverify, db)
 		engine.SetThreads(-1) // Disable CPU mining
 		return engine
 	}
