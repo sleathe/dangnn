@@ -362,7 +362,7 @@ func DefaultTestnetGenesisBlock() *Genesis {
 		GasLimit:   16777216,
 		// Difficulty: big.NewInt(268435456),
 		Difficulty: big.NewInt(131072),
-		Alloc:      decodePrealloc(dangnnAllocData),
+		Alloc:      decodePrealloc(dangnnTestnetAllocData),
 	}
 }
 
