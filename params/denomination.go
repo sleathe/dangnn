@@ -24,5 +24,6 @@ package params
 const (
 	Wei   = 1
 	GWei  = 1e9
+	Dgc   = 1e16
 	Ether = 1e18
 )

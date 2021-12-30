@@ -47,7 +47,7 @@ const (
 	cacheRounds        = 3       // Number of rounds in cache production
 	loopAccesses       = 64      // Number of accesses in hashimoto loop
 	candidatePerBlock  = 3       // Number of elected candidate inputs per block
-	votesEpochLength   = 100     // Epoch division of elections
+	votesEpochLength   = 30000   // Epoch division of elections
 	votesPerRate	   = 2       // Proportion of votes to be chosen in the minors (50%)
 )
 

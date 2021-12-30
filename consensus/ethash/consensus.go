@@ -41,6 +41,7 @@ var (
 	FrontierBlockReward       = big.NewInt(5e+18) // Block reward in wei for successfully mining a block
 	ByzantiumBlockReward      = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
 	ConstantinopleBlockReward = big.NewInt(2e+18) // Block reward in wei for successfully mining a block upward from Constantinople
+	GenesisBlockReward        = big.NewInt(3e+18) // Initial block reward
 	maxUncles                 = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime    = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
 
@@ -291,7 +292,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	// Check if the miner has permission.
 	minerAddr, err := types.BlockSender(types.MakeBlockSigner(chain.Config()),header)
 	if err != nil {
-		return consensus.ErrInvalidMiner
+		return err
 	}
 	if !bytes.Equal(header.Coinbase.Bytes(),minerAddr.Bytes()) {
 		return consensus.ErrInvalidMiner
@@ -721,6 +722,9 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 	if config.IsConstantinople(header.Number) {
 		blockReward = ConstantinopleBlockReward
 	}
+
+	blockReward = GenesisBlockReward	// Ignore the above specification
+
 	// Accumulate the rewards for the miner and any included uncles
 	reward := new(big.Int).Set(blockReward)
 	r := new(big.Int)

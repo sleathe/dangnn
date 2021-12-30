@@ -209,6 +209,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		}
 		// Execute any user modifications to the block
 		if gen != nil {
+			b.SetCoinbase(b.header.Coinbase)
 			gen(i, b)
 		}
 		if b.engine != nil {

@@ -168,7 +168,8 @@ func benchInsertChain(b *testing.B, disk bool, gen func(int, *BlockGen)) {
 	// generator function.
 	gspec := Genesis{
 		Config: params.TestChainConfig,
-		Alloc:  GenesisAlloc{benchRootAddr: {Balance: benchRootFunds}},
+		Coinbase: benchRootAddr,
+		Alloc:  GenesisAlloc{benchRootAddr: {Balance: benchRootFunds ,AuthMine:1}},
 	}
 	genesis := gspec.MustCommit(db)
 	chain, _ := GenerateChain(gspec.Config, genesis, ethash.NewFaker(), db, b.N, gen)

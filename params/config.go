@@ -29,8 +29,8 @@ import (
 var (
 	//MainnetGenesisHash = common.HexToHash("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
 	//TestnetGenesisHash = common.HexToHash("0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d")
-	MainnetGenesisHash = common.HexToHash("0x6569112dadd164cd93d94d0de47144ef58728e31882ebe97681927ab496f0019")
-	TestnetGenesisHash = common.HexToHash("0x2e56b590dec5dbe4a11abafcd208744ca06e5c2a8cb5780f52ef23ef8358094e")
+	MainnetGenesisHash = common.HexToHash("0x0689fea00563476545724e728a3f87b454981b4b7eff1847e84147864378224f")
+	TestnetGenesisHash = common.HexToHash("0xec759f17b70ff944188952b3d6253997bdfb285dd6fcacac267b579352a4f862")
 	RinkebyGenesisHash = common.HexToHash("0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177")
 	GoerliGenesisHash  = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
 )
