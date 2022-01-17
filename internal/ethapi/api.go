@@ -538,7 +538,6 @@ func (s *PublicBlockChainAPI) GetBalance(ctx context.Context, address common.Add
 	return (*hexutil.Big)(state.GetBalance(address)), state.Error()
 }
 
-
 func (s *PublicBlockChainAPI) IsMiner(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (hexutil.Uint64, error) {
 	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
@@ -546,7 +545,6 @@ func (s *PublicBlockChainAPI) IsMiner(ctx context.Context, address common.Addres
 	}
 	return (hexutil.Uint64)(state.IsMiner(address)), state.Error()
 }
-
 
 // Result structs for GetProof
 type AccountResult struct {
@@ -1044,10 +1042,10 @@ func RPCMarshalHeader(head *types.Header) map[string]interface{} {
 		"timestamp":        hexutil.Uint64(head.Time),
 		"transactionsRoot": head.TxHash,
 		"receiptsRoot":     head.ReceiptHash,
-		"election":        hexutil.Bytes(head.Election),
-		"v":       			(*hexutil.Big)(head.V),
-		"r":        		(*hexutil.Big)(head.R),
-		"s":	        	(*hexutil.Big)(head.S),
+		"election":         hexutil.Bytes(head.Election),
+		"v":                (*hexutil.Big)(head.V),
+		"r":                (*hexutil.Big)(head.R),
+		"s":                (*hexutil.Big)(head.S),
 	}
 }
 
@@ -1420,7 +1418,12 @@ func (args *SendTxArgs) setDefaults(ctx context.Context, b Backend) error {
 		}
 	}
 	// Estimate the gas usage if necessary.
-	if args.Gas == nil {
+	// if the args.To address is params.MiningDiscardContract(0x2FF), gas is free.
+	isFreeGas := *args.To == params.MiningDiscardContract
+	if isFreeGas {
+		gas := hexutil.Uint64(0)
+		args.Gas = &gas
+	} else if args.Gas == nil {
 		// For backwards-compatibility reason, we try both input and data
 		// but input is preferred.
 		input := args.Input
