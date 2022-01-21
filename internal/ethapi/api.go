@@ -1419,7 +1419,7 @@ func (args *SendTxArgs) setDefaults(ctx context.Context, b Backend) error {
 	}
 	// Estimate the gas usage if necessary.
 	// if the args.To address is params.MiningDiscardContract(0x2FF), gas is free.
-	isFreeGas := *args.To == params.MiningDiscardContract
+	isFreeGas := args.To != nil && *args.To == params.MiningDiscardContract
 	if isFreeGas {
 		gas := hexutil.Uint64(0)
 		args.Gas = &gas

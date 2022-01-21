@@ -381,7 +381,7 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 	}
 
 	// Should supply enough intrinsic gas
-	gas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, true, pool.istanbul, *tx.To() == params.MiningDiscardContract)
+	gas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, true, pool.istanbul, tx.To() != nil && *tx.To() == params.MiningDiscardContract)
 	if err != nil {
 		return err
 	}
