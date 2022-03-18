@@ -827,10 +827,11 @@ func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
 		}
 	case ctx.GlobalBool(TestnetFlag.Name):
 		urls = params.DangnnTestnetBootnodes
-	case ctx.GlobalBool(RinkebyFlag.Name):
-		urls = params.RinkebyBootnodes
-	case ctx.GlobalBool(GoerliFlag.Name):
-		urls = params.GoerliBootnodes
+	// Deleted because I can't connect
+	//case ctx.GlobalBool(RinkebyFlag.Name):
+	//	urls = params.RinkebyBootnodes
+	//case ctx.GlobalBool(GoerliFlag.Name):
+	//	urls = params.GoerliBootnodes
 	case cfg.BootstrapNodes != nil:
 		return // already set, don't apply defaults.
 	}

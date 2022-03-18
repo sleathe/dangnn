@@ -344,7 +344,7 @@ func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big
 func DefaultGenesisBlock() *Genesis {
 	return &Genesis{
 		Config:     params.MainnetChainConfig,
-		Nonce:      0,
+		Nonce:      64,
 		ExtraData:  hexutil.MustDecode("0x969e93a4dd7e6362f5e6eb3ffb04204579d0a1f445c21d68a5f8fe48c067e2e4"),
 		GasLimit:   8000000,
 		Difficulty: params.GenesisDifficulty,
