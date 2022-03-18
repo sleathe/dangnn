@@ -76,9 +76,12 @@ type Message interface {
 }
 
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
-func IntrinsicGas(data []byte, contractCreation, isHomestead bool, isEIP2028 bool) (uint64, error) {
+func IntrinsicGas(data []byte, contractCreation, isHomestead bool, isEIP2028 bool, isFree bool) (uint64, error) {
 	// Set the starting gas for the raw transaction
 	var gas uint64
+	if isFree {
+		return 0, nil
+	}
 	if contractCreation && isHomestead {
 		gas = params.TxGasContractCreation
 	} else {
@@ -193,9 +196,10 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	homestead := st.evm.ChainConfig().IsHomestead(st.evm.BlockNumber)
 	istanbul := st.evm.ChainConfig().IsIstanbul(st.evm.BlockNumber)
 	contractCreation := msg.To() == nil
+	isMiningDiscard := msg.To() != nil && *msg.To() == params.MiningDiscardContract
 
 	// Pay intrinsic gas
-	gas, err := IntrinsicGas(st.data, contractCreation, homestead, istanbul)
+	gas, err := IntrinsicGas(st.data, contractCreation, homestead, istanbul, isMiningDiscard)
 	if err != nil {
 		return nil, 0, false, err
 	}
