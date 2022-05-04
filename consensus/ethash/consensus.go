@@ -42,6 +42,7 @@ var (
 	ByzantiumBlockReward      = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
 	ConstantinopleBlockReward = big.NewInt(2e+18) // Block reward in wei for successfully mining a block upward from Constantinople
 	GenesisBlockReward        = big.NewInt(3e+18) // Initial block reward
+	CarrotBlockReward        = big.NewInt(3.3e+18) // Block reward in wei for successfully mining a block upward from Initial block
 	maxUncles                 = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime    = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
 
@@ -724,6 +725,9 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 	}
 
 	blockReward = GenesisBlockReward	// Ignore the above specification
+	if config.IsCarrot(header.Number) {
+		blockReward = CarrotBlockReward
+	}
 
 	// Accumulate the rewards for the miner and any included uncles
 	reward := new(big.Int).Set(blockReward)
